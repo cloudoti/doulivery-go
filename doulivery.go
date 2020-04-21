@@ -55,18 +55,6 @@ func CreateClient(appId, key, secret string) *Client {
 	return &d
 }
 
-func (d *Client) requestDoulivery() *http.Client {
-	if d.HTTPClient == nil {
-		d.HTTPClient = &http.Client{Timeout: d.Settings.Timeout}
-	}
-
-	return d.HTTPClient
-}
-
-func (d *Client) request(method, url string, body []byte) ([]byte, error) {
-	return request(d.requestDoulivery(), method, url, body)
-}
-
 func (d *Client) Trigger(channels []string, event string, data interface{}, encoded bool) (err error) {
 	if err = d.validateChannels(channels); err != nil {
 		return
@@ -111,9 +99,21 @@ func (d *Client) Trigger(channels []string, event string, data interface{}, enco
 		return
 	}
 
-	_, err = d.request("POST", triggerURL, b)
+	_, err = d.request("POST", triggerURL, d.Secret, b, nil)
 
 	return err
+}
+
+func (d *Client) requestDoulivery() *http.Client {
+	if d.HTTPClient == nil {
+		d.HTTPClient = &http.Client{Timeout: d.Settings.Timeout}
+	}
+
+	return d.HTTPClient
+}
+
+func (d *Client) request(method, url, secret string, body []byte, m *Mailer) ([]byte, error) {
+	return request(d.requestDoulivery(), method, url, secret, body, m)
 }
 
 func (d *Client) validateChannels(channels []string) error {

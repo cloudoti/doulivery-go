@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	"io/ioutil"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -48,9 +49,49 @@ func createRequestURL(host, path, key, secret string, secure bool, md5Body strin
 	return endpoint.String(), nil
 }
 
-func request(client *http.Client, method string, url string, body []byte) ([]byte, error) {
-	req, err := http.NewRequest(method, url, bytes.NewBuffer(body))
-	req.Header.Set("Content-Type", "application/json")
+func request(client *http.Client, method string, url, secret string, body []byte, m *Mailer) ([]byte, error) {
+
+	var b *bytes.Buffer
+	var writer *multipart.Writer
+
+	if m == nil {
+		b = bytes.NewBuffer(body)
+	} else {
+		b = &bytes.Buffer{}
+		writer = multipart.NewWriter(b)
+
+		_ = writer.WriteField("service", m.Service)
+		_ = writer.WriteField("from", m.From)
+		for _, to := range m.To {
+			_ = writer.WriteField("to", to)
+		}
+		_ = writer.WriteField("subject", m.Subject)
+		_ = writer.WriteField("is_html", strconv.FormatBool(m.Html))
+		_ = writer.WriteField("body", m.Body)
+
+		for _, fil := range m.Files {
+			part, err := writer.CreateFormFile("files", fil.Name)
+			if err != nil {
+				panic(err)
+			}
+			part.Write(fil.Content)
+		}
+
+		err := writer.Close()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	req, err := http.NewRequest(method, url, b)
+	req.Header.Set("Authorization", secret)
+
+	if m == nil {
+		req.Header.Set("Content-Type", "application/json")
+	} else {
+		req.Header.Set("Content-Type", writer.FormDataContentType())
+	}
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
